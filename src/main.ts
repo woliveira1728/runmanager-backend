@@ -54,7 +54,9 @@ async function bootstrap() {
   await app.listen(port);
 
   logger.log(`🚀 Aplicação RunManager Backend executando na porta ${port}`);
-  logger.log(`📚 Documentação Swagger disponível em: http://localhost:${port}/api/docs`);
+  logger.log(
+    `📚 Documentação Swagger disponível em: http://localhost:${port}/api/docs`,
+  );
 }
 
 void bootstrap();
