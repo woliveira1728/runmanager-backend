@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
-  IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -40,13 +40,17 @@ export class CreateUserDto {
   password: string;
 
   @ApiPropertyOptional({
-    description: 'Perfil de permissão no sistema (RBAC)',
-    enum: Role,
+    description:
+      'Perfil de permissão no sistema (RBAC). Autocadastro restrito a ATHLETE ou ORGANIZER.',
+    enum: [Role.ATHLETE, Role.ORGANIZER],
     default: Role.ATHLETE,
     example: Role.ATHLETE,
   })
   @IsOptional()
-  @IsEnum(Role, { message: 'Papel de usuário inválido.' })
+  @IsIn([Role.ATHLETE, Role.ORGANIZER], {
+    message:
+      'Papel de usuário inválido para autocadastro. Permitido apenas ATHLETE ou ORGANIZER.',
+  })
   role?: Role;
 
   @ApiPropertyOptional({

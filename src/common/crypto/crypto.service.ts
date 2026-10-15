@@ -9,13 +9,25 @@ export class CryptoService {
   private readonly key: Buffer;
 
   constructor(private readonly configService: ConfigService) {
-    const rawKey =
-      this.configService.get<string>('ENCRYPTION_KEY') ??
-      'runmanager_lgpd_secret_key_32b!';
+    const nodeEnv = this.configService.get<string>('NODE_ENV');
+    const rawKey = this.configService.get<string>('ENCRYPTION_KEY');
+
+    if (!rawKey) {
+      if (nodeEnv === 'production') {
+        throw new Error(
+          'CRÍTICO: A variável de ambiente ENCRYPTION_KEY deve ser configurada em produção.',
+        );
+      }
+      this.logger.warn(
+        'AVISO DE SEGURANÇA: ENCRYPTION_KEY não configurada. Utilizando chave de desenvolvimento.',
+      );
+    }
+
+    const keyToUse = rawKey ?? 'runmanager_lgpd_secret_key_32b!';
 
     // Assegura 32 bytes (256 bits) para o algoritmo aes-256-gcm
     this.key = Buffer.alloc(32);
-    this.key.write(rawKey.padEnd(32, '0').slice(0, 32), 'utf-8');
+    this.key.write(keyToUse.padEnd(32, '0').slice(0, 32), 'utf-8');
   }
 
   /**

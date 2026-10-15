@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   ConflictException,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
@@ -62,7 +63,7 @@ describe('UsersService', () => {
       password: 'password123',
       role: Role.ATHLETE,
       athleteProfile: {
-        cpf: '123.456.789-01',
+        cpf: '123.456.789-09',
         birthDate: '1995-05-20',
         gender: Gender.M,
         shirtSize: ShirtSize.M,
@@ -98,13 +99,42 @@ describe('UsersService', () => {
         where: { email: 'wilson@teste.com' },
       });
       expect(prismaService.athleteProfile.findUnique).toHaveBeenCalledWith({
-        where: { cpf: '12345678901' },
+        where: { cpf: '12345678909' },
       });
       expect(cryptoService.encrypt).toHaveBeenCalledWith('Maria 92988887777');
       expect(cryptoService.encrypt).toHaveBeenCalledWith('Nenhuma alergia');
       expect(result.id).toBe('user-uuid');
       expect(result).not.toHaveProperty('passwordHash');
       expect(result.athleteProfile.emergencyContact).toBe('Maria 92988887777');
+    });
+
+    it('should throw ForbiddenException if trying to register as ADMIN', async () => {
+      prismaService.user.findUnique.mockResolvedValue(null);
+
+      const adminAttemptDto = {
+        ...validCreateUserDto,
+        role: Role.ADMIN,
+      };
+
+      await expect(service.create(adminAttemptDto as any)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should throw BadRequestException if CPF has invalid check digits', async () => {
+      prismaService.user.findUnique.mockResolvedValue(null);
+
+      const invalidCpfDto = {
+        ...validCreateUserDto,
+        athleteProfile: {
+          ...validCreateUserDto.athleteProfile,
+          cpf: '111.111.111-11',
+        },
+      };
+
+      await expect(service.create(invalidCpfDto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw ConflictException if email already registered', async () => {
@@ -171,6 +201,57 @@ describe('UsersService', () => {
       await expect(service.findById('unknown-id')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('findByIdForViewer', () => {
+    const mockUser = {
+      id: 'target-uuid',
+      name: 'Atleta Silva',
+      email: 'atleta@teste.com',
+      role: Role.ATHLETE,
+      passwordHash: 'secret-hash',
+      athleteProfile: {
+        cpf: '12345678909',
+        emergencyContact: 'enc:Maria 92988887777',
+        medicalNotes: 'enc:Alérgico a Dipirona',
+      },
+    };
+
+    it('should decrypt all sensitive medical data when viewer is self', async () => {
+      prismaService.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.findByIdForViewer('target-uuid', {
+        id: 'target-uuid',
+        role: Role.ATHLETE,
+      });
+
+      expect(result.athleteProfile.emergencyContact).toBe('Maria 92988887777');
+      expect(result.athleteProfile.medicalNotes).toBe('Alérgico a Dipirona');
+    });
+
+    it('should decrypt all sensitive medical data when viewer is ADMIN', async () => {
+      prismaService.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.findByIdForViewer('target-uuid', {
+        id: 'admin-uuid',
+        role: Role.ADMIN,
+      });
+
+      expect(result.athleteProfile.emergencyContact).toBe('Maria 92988887777');
+      expect(result.athleteProfile.medicalNotes).toBe('Alérgico a Dipirona');
+    });
+
+    it('should protect and redact confidential medicalNotes when viewer is ORGANIZER', async () => {
+      prismaService.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.findByIdForViewer('target-uuid', {
+        id: 'organizer-uuid',
+        role: Role.ORGANIZER,
+      });
+
+      expect(result.athleteProfile.emergencyContact).toBe('Maria 92988887777');
+      expect(result.athleteProfile.medicalNotes).toBeNull();
     });
   });
 });

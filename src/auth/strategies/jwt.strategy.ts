@@ -7,14 +7,22 @@ import { JwtPayload } from '../interfaces/jwt-payload.interface';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private readonly configService: ConfigService) {
-    const secret =
-      configService.get<string>('JWT_SECRET') ??
-      'super_secret_jwt_key_runmanager_ulbra_2026';
+    const nodeEnv = configService.get<string>('NODE_ENV');
+    const secret = configService.get<string>('JWT_SECRET');
+
+    if (!secret && nodeEnv === 'production') {
+      throw new Error(
+        'CRÍTICO: A variável de ambiente JWT_SECRET deve ser configurada em produção.',
+      );
+    }
+
+    const secretOrKey =
+      secret ?? 'super_secret_jwt_key_runmanager_ulbra_2026';
 
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: secret,
+      secretOrKey,
     });
   }
 

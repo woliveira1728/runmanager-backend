@@ -1,12 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
+import { isValidCpf } from '../common/validators/cpf.validator';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateAthleteProfileDto } from './dto/update-athlete-profile.dto';
 import { Role } from '@prisma/client';
@@ -35,10 +37,17 @@ export class UsersService {
       );
     }
 
+    // 2. Proteção contra escalação de privilégios (CWE-269)
+    if (createUserDto.role === Role.ADMIN) {
+      throw new ForbiddenException(
+        'Não é permitido autocadastrar perfil de Administrador.',
+      );
+    }
+
     const role = createUserDto.role ?? Role.ATHLETE;
     let athleteProfileData = undefined;
 
-    // 2. Validações e tratamento de perfil de atleta (se fornecido)
+    // 3. Validações e tratamento de perfil de atleta (se fornecido)
     if (createUserDto.athleteProfile) {
       const { athleteProfile } = createUserDto;
 
@@ -49,6 +58,30 @@ export class UsersService {
       }
 
       const cpfClean = athleteProfile.cpf.replace(/\D/g, '');
+
+      if (!isValidCpf(cpfClean)) {
+        throw new BadRequestException(
+          'O CPF informado possui dígitos verificadores inválidos.',
+        );
+      }
+
+      const birth = new Date(athleteProfile.birthDate);
+      if (isNaN(birth.getTime())) {
+        throw new BadRequestException('Data de nascimento inválida.');
+      }
+      const now = new Date();
+      if (birth > now) {
+        throw new BadRequestException(
+          'A data de nascimento não pode ser futura.',
+        );
+      }
+      const minDate = new Date();
+      minDate.setFullYear(now.getFullYear() - 120);
+      if (birth < minDate) {
+        throw new BadRequestException(
+          'Data de nascimento fora do intervalo permitido.',
+        );
+      }
 
       const existingProfile = await this.prisma.athleteProfile.findUnique({
         where: { cpf: cpfClean },
@@ -70,7 +103,7 @@ export class UsersService {
 
       athleteProfileData = {
         cpf: cpfClean,
-        birthDate: new Date(athleteProfile.birthDate),
+        birthDate: birth,
         gender: athleteProfile.gender,
         shirtSize: athleteProfile.shirtSize,
         emergencyContact: encryptedEmergency ?? '',
@@ -135,6 +168,46 @@ export class UsersService {
   }
 
   /**
+   * Busca um usuário pelo ID com controle granular de acesso LGPD para terceiros.
+   * Se o visualizador for o próprio titular ou ADMIN, dados médicos são descriptografados.
+   * Se for ORGANIZER, anotações médicas privadas são omitidas para proteção da privacidade.
+   */
+  async findByIdForViewer(id: string, viewer: { id: string; role: Role }) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        athleteProfile: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado.');
+    }
+
+    const isSelf = viewer.id === user.id;
+    const isAdmin = viewer.role === Role.ADMIN;
+
+    if (isSelf || isAdmin) {
+      return this.sanitizeUser(user);
+    }
+
+    // Para organizadores, resguarda anotações médicas confidenciais (LGPD Art. 5º, II e Art. 11)
+    const { passwordHash: _passwordHash, ...sanitized } = user;
+    if (sanitized.athleteProfile) {
+      sanitized.athleteProfile = {
+        ...sanitized.athleteProfile,
+        emergencyContact:
+          this.cryptoService.decrypt(
+            sanitized.athleteProfile.emergencyContact,
+          ) ?? '',
+        medicalNotes: null,
+      };
+    }
+
+    return sanitized;
+  }
+
+  /**
    * Atualiza dados permitidos do perfil do atleta.
    */
   async updateAthleteProfile(userId: string, dto: UpdateAthleteProfileDto) {
@@ -190,9 +263,10 @@ export class UsersService {
     if (sanitized.athleteProfile) {
       sanitized.athleteProfile = {
         ...sanitized.athleteProfile,
-        emergencyContact: this.cryptoService.decrypt(
-          sanitized.athleteProfile.emergencyContact,
-        ),
+        emergencyContact:
+          this.cryptoService.decrypt(
+            sanitized.athleteProfile.emergencyContact,
+          ) ?? '',
         medicalNotes: this.cryptoService.decrypt(
           sanitized.athleteProfile.medicalNotes,
         ),

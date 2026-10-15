@@ -15,15 +15,26 @@ import { UsersModule } from '../users/users.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>('JWT_SECRET') ??
-          'super_secret_jwt_key_runmanager_ulbra_2026',
-        signOptions: {
-          expiresIn: (configService.get<string>('JWT_EXPIRES_IN') ??
-            '7d') as any,
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const nodeEnv = configService.get<string>('NODE_ENV');
+        const secret = configService.get<string>('JWT_SECRET');
+
+        if (!secret) {
+          if (nodeEnv === 'production') {
+            throw new Error(
+              'CRÍTICO: A variável de ambiente JWT_SECRET deve ser configurada em produção.',
+            );
+          }
+        }
+
+        return {
+          secret: secret ?? 'super_secret_jwt_key_runmanager_ulbra_2026',
+          signOptions: {
+            expiresIn: (configService.get<string>('JWT_EXPIRES_IN') ??
+              '7d') as any,
+          },
+        };
+      },
     }),
     forwardRef(() => UsersModule),
   ],

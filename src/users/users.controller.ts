@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Post,
   Put,
   UseGuards,
@@ -102,7 +103,7 @@ export class UsersController {
   @ApiOperation({
     summary: 'Buscar usuário por ID (Admin / Organizador)',
     description:
-      'Permite que administradores ou organizadores visualizem informações de um usuário específico.',
+      'Permite que administradores ou organizadores visualizem informações de um usuário com filtragem de privacidade LGPD.',
   })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -116,7 +117,10 @@ export class UsersController {
     status: HttpStatus.NOT_FOUND,
     description: 'Usuário não encontrado.',
   })
-  async getById(@Param('id') id: string) {
-    return this.usersService.findById(id);
+  async getById(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() currentUser: { id: string; role: Role },
+  ) {
+    return this.usersService.findByIdForViewer(id, currentUser);
   }
 }

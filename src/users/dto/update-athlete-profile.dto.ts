@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 import { ShirtSize } from '@prisma/client';
 
 export class UpdateAthleteProfileDto {
@@ -20,6 +20,9 @@ export class UpdateAthleteProfileDto {
   })
   @IsOptional()
   @IsString()
+  @MinLength(3, {
+    message: 'O contato de emergência deve ter no mínimo 3 caracteres.',
+  })
   emergencyContact?: string;
 
   @ApiPropertyOptional({

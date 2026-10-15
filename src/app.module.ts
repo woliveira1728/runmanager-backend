@@ -6,6 +6,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { CryptoModule } from './common/crypto/crypto.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { EventsModule } from './events/events.module';
+import { RegistrationsModule } from './registrations/registrations.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { AuthModule } from './auth/auth.module';
     CryptoModule,
     UsersModule,
     AuthModule,
+    EventsModule,
+    RegistrationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -2,23 +2,26 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsEnum,
+  IsISO8601,
   IsNotEmpty,
   IsOptional,
   IsString,
   Matches,
 } from 'class-validator';
 import { Gender, ShirtSize } from '@prisma/client';
+import { IsValidCpf } from '../../common/validators/cpf.validator';
 
 export class CreateAthleteProfileDto {
   @ApiProperty({
     description: 'CPF do atleta (apenas números ou com pontuação)',
-    example: '123.456.789-00',
+    example: '123.456.789-09',
   })
   @IsString()
   @IsNotEmpty({ message: 'O CPF é obrigatório.' })
   @Matches(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, {
     message: 'CPF em formato inválido. Use 11 dígitos ou 000.000.000-00',
   })
+  @IsValidCpf()
   cpf: string;
 
   @ApiProperty({
@@ -26,7 +29,13 @@ export class CreateAthleteProfileDto {
     example: '1995-05-20',
   })
   @IsNotEmpty({ message: 'A data de nascimento é obrigatória.' })
-  @IsString()
+  @IsISO8601(
+    { strict: true },
+    {
+      message:
+        'A data de nascimento deve estar em formato ISO válido (AAAA-MM-DD).',
+    },
+  )
   birthDate: string;
 
   @ApiProperty({
