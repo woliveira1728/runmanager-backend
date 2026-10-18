@@ -162,6 +162,7 @@ export class RegistrationsService {
         data: {
           athleteId,
           batchId: dto.batchId,
+          eventId: event.id,
           bibNumber,
           paymentStatus: PaymentStatus.CONFIRMED,
           qrCodeHash,

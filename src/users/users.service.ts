@@ -208,7 +208,8 @@ export class UsersService {
   }
 
   /**
-   * Atualiza dados permitidos do perfil do atleta.
+   * Atualiza dados permitidos do perfil do atleta (UC03).
+   * Valida consentimento LGPD (Exceção 3A) e DDD válido no contato de emergência (Exceção 3B).
    */
   async updateAthleteProfile(userId: string, dto: UpdateAthleteProfileDto) {
     const profile = await this.prisma.athleteProfile.findUnique({
@@ -221,22 +222,42 @@ export class UsersService {
       );
     }
 
+    // Exceção 3A: Recusa do Termo de Consentimento LGPD
+    if (dto.lgpdConsent === false) {
+      throw new BadRequestException(
+        'O consentimento obrigatório da LGPD para tratamento de dados sensíveis de emergência não pode ser recusado, pois tais dados são requisitos de segurança em provas esportivas.',
+      );
+    }
+
     const dataToUpdate: any = {};
 
     if (dto.shirtSize) {
       dataToUpdate.shirtSize = dto.shirtSize;
     }
 
-    if (dto.emergencyContact) {
+    if (dto.emergencyContact !== undefined) {
+      // Exceção 3B: Validação de DDD válido no telefone de emergência
+      const phoneDigits = dto.emergencyContact.replace(/\D/g, '');
+      if (phoneDigits.length < 10 || !/^[1-9]{2}/.test(phoneDigits)) {
+        throw new BadRequestException(
+          'O contato de emergência deve conter um número de telefone com DDD válido (ex: (92) 99222-3344).',
+        );
+      }
+
       dataToUpdate.emergencyContact = this.cryptoService.encrypt(
-        dto.emergencyContact,
+        dto.emergencyContact.trim(),
       );
     }
 
     if (dto.medicalNotes !== undefined) {
-      dataToUpdate.medicalNotes = dto.medicalNotes
-        ? this.cryptoService.encrypt(dto.medicalNotes)
+      dataToUpdate.medicalNotes = dto.medicalNotes.trim()
+        ? this.cryptoService.encrypt(dto.medicalNotes.trim())
         : null;
+    }
+
+    if (dto.lgpdConsent === true) {
+      dataToUpdate.lgpdConsent = true;
+      dataToUpdate.lgpdConsentAt = new Date();
     }
 
     const updatedProfile = await this.prisma.athleteProfile.update({

@@ -265,6 +265,7 @@ describe('RegistrationsService', () => {
           data: expect.objectContaining({
             athleteId: mockAthleteId,
             batchId: mockBatchId,
+            eventId: mockEventId,
             bibNumber: 106,
             paymentStatus: PaymentStatus.CONFIRMED,
             checkedIn: false,

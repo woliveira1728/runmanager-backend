@@ -1,5 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { ShirtSize } from '@prisma/client';
 
 export class UpdateAthleteProfileDto {
@@ -15,7 +21,7 @@ export class UpdateAthleteProfileDto {
   shirtSize?: ShirtSize;
 
   @ApiPropertyOptional({
-    description: 'Contato de emergência (Nome e Telefone)',
+    description: 'Contato de emergência com DDD válido (Nome e Telefone)',
     example: 'Carlos Oliveira - (92) 99222-3344',
   })
   @IsOptional()
@@ -33,4 +39,13 @@ export class UpdateAthleteProfileDto {
   @IsOptional()
   @IsString()
   medicalNotes?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Confirmação do termo de consentimento LGPD para tratamento de dados sensíveis de saúde',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'O consentimento LGPD deve ser um valor booleano.' })
+  lgpdConsent?: boolean;
 }

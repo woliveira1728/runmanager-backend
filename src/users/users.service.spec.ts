@@ -254,4 +254,69 @@ describe('UsersService', () => {
       expect(result.athleteProfile.medicalNotes).toBeNull();
     });
   });
+
+  describe('updateAthleteProfile (UC03 - Manter perfil e consentimento LGPD)', () => {
+    it('deve rejeitar com BadRequestException se o consentimento LGPD for recusado (Exceção 3A)', async () => {
+      prismaService.athleteProfile.findUnique.mockResolvedValue({
+        id: 'prof-1',
+        userId: 'user-uuid',
+      });
+
+      await expect(
+        service.updateAthleteProfile('user-uuid', {
+          shirtSize: ShirtSize.G,
+          lgpdConsent: false,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('deve rejeitar com BadRequestException se o contato de emergência não possuir DDD válido (Exceção 3B)', async () => {
+      prismaService.athleteProfile.findUnique.mockResolvedValue({
+        id: 'prof-1',
+        userId: 'user-uuid',
+      });
+
+      await expect(
+        service.updateAthleteProfile('user-uuid', {
+          emergencyContact: 'Carlos 99999-8888', // Sem DDD (apenas 9 dígitos)
+          lgpdConsent: true,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('deve atualizar perfil com criptografia AES-256 e timestamp de consentimento LGPD', async () => {
+      prismaService.athleteProfile.findUnique.mockResolvedValue({
+        id: 'prof-1',
+        userId: 'user-uuid',
+      });
+      prismaService.athleteProfile.update.mockImplementation((args: any) =>
+        Promise.resolve({
+          id: 'prof-1',
+          userId: 'user-uuid',
+          shirtSize: args.data.shirtSize,
+          emergencyContact: args.data.emergencyContact,
+          medicalNotes: args.data.medicalNotes,
+          lgpdConsent: args.data.lgpdConsent,
+          lgpdConsentAt: args.data.lgpdConsentAt,
+        }),
+      );
+
+      const updated = await service.updateAthleteProfile('user-uuid', {
+        shirtSize: ShirtSize.G,
+        emergencyContact: 'Carlos (92) 99222-3344',
+        medicalNotes: 'Tipo O+',
+        lgpdConsent: true,
+      });
+
+      expect(cryptoService.encrypt).toHaveBeenCalledWith(
+        'Carlos (92) 99222-3344',
+      );
+      expect(cryptoService.encrypt).toHaveBeenCalledWith('Tipo O+');
+      expect(updated.shirtSize).toBe(ShirtSize.G);
+      expect(updated.emergencyContact).toBe('Carlos (92) 99222-3344');
+      expect(updated.medicalNotes).toBe('Tipo O+');
+      expect(updated.lgpdConsent).toBe(true);
+      expect(updated.lgpdConsentAt).toBeInstanceOf(Date);
+    });
+  });
 });
