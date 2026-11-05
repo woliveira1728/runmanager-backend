@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { EventsModule } from './events/events.module';
 import { RegistrationsModule } from './registrations/registrations.module';
+import { ResultsModule } from './results/results.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { RegistrationsModule } from './registrations/registrations.module';
     AuthModule,
     EventsModule,
     RegistrationsModule,
+    ResultsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

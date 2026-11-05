@@ -418,4 +418,77 @@ describe('RegistrationsService', () => {
       expect(result.checkedIn).toBe(true);
     });
   });
+
+  describe('updatePaymentStatus (Confirmação / Cancelamento Manual pelo Organizador - UC05)', () => {
+    it('deve bloquear cancelamento se o atleta já realizou check-in na arena', async () => {
+      prismaService.registration.findUnique.mockResolvedValueOnce({
+        id: 'reg-1',
+        batchId: mockBatchId,
+        paymentStatus: PaymentStatus.CONFIRMED,
+        checkedIn: true,
+        batch: mockBatch,
+      });
+
+      await expect(
+        service.updatePaymentStatus('reg-1', mockOrganizerId, Role.ORGANIZER, {
+          paymentStatus: PaymentStatus.CANCELLED,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('deve cancelar inscrição ativa e liberar 1 vaga no lote transacionalmente', async () => {
+      prismaService.registration.findUnique.mockResolvedValueOnce({
+        id: 'reg-1',
+        batchId: mockBatchId,
+        paymentStatus: PaymentStatus.CONFIRMED,
+        checkedIn: false,
+        batch: mockBatch,
+      });
+      prismaService.registrationBatch.findUnique.mockResolvedValueOnce(mockBatch);
+      prismaService.registrationBatch.update.mockResolvedValueOnce({
+        ...mockBatch,
+        filledSlots: 9,
+      });
+      prismaService.registration.update.mockResolvedValueOnce({
+        id: 'reg-1',
+        paymentStatus: PaymentStatus.CANCELLED,
+      });
+
+      const updated = await service.updatePaymentStatus(
+        'reg-1',
+        mockOrganizerId,
+        Role.ORGANIZER,
+        { paymentStatus: PaymentStatus.CANCELLED },
+      );
+
+      expect(prismaService.registrationBatch.update).toHaveBeenCalledWith({
+        where: { id: mockBatchId },
+        data: { filledSlots: { decrement: 1 } },
+      });
+      expect(updated.paymentStatus).toBe(PaymentStatus.CANCELLED);
+    });
+
+    it('deve confirmar inscrição pendente pelo organizador da prova', async () => {
+      prismaService.registration.findUnique.mockResolvedValueOnce({
+        id: 'reg-2',
+        batchId: mockBatchId,
+        paymentStatus: PaymentStatus.PENDING,
+        checkedIn: false,
+        batch: mockBatch,
+      });
+      prismaService.registration.update.mockResolvedValueOnce({
+        id: 'reg-2',
+        paymentStatus: PaymentStatus.CONFIRMED,
+      });
+
+      const updated = await service.updatePaymentStatus(
+        'reg-2',
+        mockOrganizerId,
+        Role.ORGANIZER,
+        { paymentStatus: PaymentStatus.CONFIRMED },
+      );
+
+      expect(updated.paymentStatus).toBe(PaymentStatus.CONFIRMED);
+    });
+  });
 });

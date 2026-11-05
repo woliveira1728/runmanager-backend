@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import {
 import { RegistrationsService } from './registrations.service';
 import { CreateRegistrationDto } from './dto/create-registration.dto';
 import { CheckInDto } from './dto/check-in.dto';
+import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -163,5 +165,42 @@ export class RegistrationsController {
     @CurrentUser('role') userRole: Role,
   ) {
     return this.registrationsService.findById(id, userId, userRole);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ORGANIZER, Role.ADMIN)
+  @Patch(':id/payment-status')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary:
+      'Confirmar ou cancelar manualmente o pagamento de uma inscrição (Organizador / Admin)',
+    description:
+      'Atualiza o status de pagamento (PENDING, CONFIRMED, CANCELLED) e ajusta transacionalmente a ocupação de vagas do lote.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Status de pagamento atualizado com sucesso.',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Status inválido ou inscrição com check-in já realizado.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Organizador sem permissão para esta prova.',
+  })
+  async updatePaymentStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') organizerId: string,
+    @CurrentUser('role') userRole: Role,
+    @Body() dto: UpdatePaymentStatusDto,
+  ) {
+    return this.registrationsService.updatePaymentStatus(
+      id,
+      organizerId,
+      userRole,
+      dto,
+    );
   }
 }

@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { CreateRegistrationDto } from './dto/create-registration.dto';
 import { CheckInDto } from './dto/check-in.dto';
+import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto';
 import { EventStatus, PaymentStatus, Role } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 
@@ -459,5 +460,125 @@ export class RegistrationsService {
     }
 
     return updated;
+  }
+
+  /**
+   * Atualiza manualmente o status de pagamento da inscrição pelo Organizador ou Admin (UC05),
+   * mantendo o contador transacional de vagas ocupadas (filledSlots) sincronizado.
+   */
+  async updatePaymentStatus(
+    registrationId: string,
+    organizerId: string,
+    userRole: Role,
+    dto: UpdatePaymentStatusDto,
+  ) {
+    const registration = await this.prisma.registration.findUnique({
+      where: { id: registrationId },
+      include: {
+        batch: {
+          include: {
+            modality: {
+              include: {
+                event: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!registration) {
+      throw new NotFoundException('Inscrição não encontrada.');
+    }
+
+    const event = registration.batch.modality.event;
+
+    if (userRole !== Role.ADMIN && event.organizerId !== organizerId) {
+      throw new ForbiddenException(
+        'Você não tem permissão para alterar o status de pagamento desta inscrição.',
+      );
+    }
+
+    if (
+      registration.checkedIn &&
+      dto.paymentStatus !== PaymentStatus.CONFIRMED
+    ) {
+      throw new BadRequestException(
+        'Não é possível cancelar ou tornar pendente uma inscrição cujo check-in e entrega de kit já foram realizados.',
+      );
+    }
+
+    if (registration.paymentStatus === dto.paymentStatus) {
+      return registration;
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const wasActive = registration.paymentStatus !== PaymentStatus.CANCELLED;
+      const willBeActive = dto.paymentStatus !== PaymentStatus.CANCELLED;
+
+      if (wasActive && !willBeActive) {
+        // Cancelamento de inscrição ativa: devolve 1 vaga ao lote
+        const currentBatch = await tx.registrationBatch.findUnique({
+          where: { id: registration.batchId },
+        });
+        if (currentBatch && currentBatch.filledSlots > 0) {
+          await tx.registrationBatch.update({
+            where: { id: registration.batchId },
+            data: {
+              filledSlots: { decrement: 1 },
+            },
+          });
+        }
+      } else if (!wasActive && willBeActive) {
+        // Reativação de inscrição cancelada: verifica disponibilidade e ocupa 1 vaga
+        const currentBatch = await tx.registrationBatch.findUnique({
+          where: { id: registration.batchId },
+        });
+        if (
+          !currentBatch ||
+          currentBatch.filledSlots >= currentBatch.maxSlots
+        ) {
+          throw new ConflictException(
+            'Não há vagas disponíveis no lote para reativar esta inscrição.',
+          );
+        }
+        await tx.registrationBatch.update({
+          where: { id: registration.batchId },
+          data: {
+            filledSlots: { increment: 1 },
+          },
+        });
+      }
+
+      return tx.registration.update({
+        where: { id: registrationId },
+        data: {
+          paymentStatus: dto.paymentStatus,
+        },
+        include: {
+          athlete: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              athleteProfile: {
+                select: {
+                  cpf: true,
+                  gender: true,
+                  shirtSize: true,
+                  birthDate: true,
+                },
+              },
+            },
+          },
+          batch: {
+            include: {
+              modality: true,
+            },
+          },
+          result: true,
+        },
+      });
+    });
   }
 }
