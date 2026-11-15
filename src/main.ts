@@ -11,16 +11,39 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // Habilitação de CORS para integração segura com o frontend Next.js (W3C Fetch compliant)
-  const allowedOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  const defaultOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://runmanager-frontend.vercel.app',
+  ];
+
+  const envOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',')
+        .map((o) => o.trim().replace(/\/+$/, ''))
+        .filter(Boolean)
+    : [];
+
+  const allowedOrigins = Array.from(
+    new Set([...defaultOrigins, ...envOrigins]),
+  );
 
   app.enableCors({
     origin: (
       origin: string | undefined,
       callback: (err: Error | null, allow?: boolean) => void,
     ) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      const normalizedOrigin = origin?.trim().replace(/\/+$/, '');
+      const isVercelPreview =
+        Boolean(normalizedOrigin) &&
+        normalizedOrigin!.startsWith('https://runmanager-frontend') &&
+        normalizedOrigin!.endsWith('.vercel.app');
+
+      if (
+        !normalizedOrigin ||
+        allowedOrigins.includes('*') ||
+        allowedOrigins.includes(normalizedOrigin) ||
+        isVercelPreview
+      ) {
         callback(null, true);
       } else {
         callback(new Error(`Origem não permitida por CORS: ${origin}`));
